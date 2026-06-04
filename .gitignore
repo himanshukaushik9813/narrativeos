@@ -20,3 +20,4 @@ cache/
 out/
 broadcast/
 lib/
+.vercel
