@@ -1,0 +1,460 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-void: #000000;
+  --bg-deep: #020202;
+  --bg-card: #080808;
+  --bg-panel: #0c0c0c;
+  --bg-input: #0f0f0f;
+  --border-dim: #141414;
+  --border-base: #1e1e1e;
+  --border-mid: #2a2a2a;
+  --border-hot: #3a3a3a;
+  --text-white: #f0f0f0;
+  --text-secondary: #707070;
+  --text-muted: #3a3a3a;
+  --text-ghost: #1e1e1e;
+  --green: #b4ff5a;
+  --green-dim: #7ab832;
+  --green-glow: rgba(180, 255, 90, 0.12);
+  --green-glow-strong: rgba(180, 255, 90, 0.25);
+  --path-giga-bull: #b4ff5a;
+  --path-bull: #22dd88;
+  --path-mild: #4499ff;
+  --path-bear: #ff7744;
+  --path-mega-bear: #ff2244;
+  --path-custom: #bb66ff;
+  --atmos-green: rgba(20, 80, 10, 0.35);
+  --atmos-green-edge: rgba(10, 40, 5, 0.15);
+  --font-mono: var(--font-space-mono), "Space Mono", "Courier New", monospace;
+  --font-body: var(--font-inter), "Inter", -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--bg-void);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  color: var(--text-white);
+  background: var(--bg-void);
+  font-family: var(--font-body);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: var(--green-glow);
+  color: var(--text-white);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+
+.label-active {
+  color: var(--text-secondary);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px var(--green-glow), 0 0 60px rgba(180, 255, 90, 0.05);
+}
+
+.text-glow-green {
+  text-shadow: 0 0 12px rgba(180, 255, 90, 0.6);
+}
+
+.engine-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  border-radius: 2px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  transition:
+    border-color 180ms ease,
+    color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.engine-button:hover {
+  transform: translateY(-1px);
+}
+
+.engine-button:disabled {
+  pointer-events: none;
+}
+
+.engine-input {
+  width: 100%;
+  border: 1px solid #1a1a1a;
+  border-radius: 2px;
+  background: #050505;
+  padding: 10px 12px;
+  color: #f0f0f0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.engine-input::placeholder {
+  color: #333333;
+}
+
+.engine-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px rgba(180, 255, 90, 0.18), 0 0 28px rgba(180, 255, 90, 0.07);
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-void);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: 2px;
+}
+
+.leverage-slider {
+  --pct: 0%;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(to right, var(--green) var(--pct), #222 var(--pct));
+  outline: none;
+}
+
+.leverage-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--green);
+  cursor: pointer;
+}
+
+.leverage-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--green);
+  cursor: pointer;
+}
+
+.premium-path-chart {
+  transform-style: preserve-3d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    inset 0 -1px 0 rgba(180, 255, 90, 0.035),
+    0 18px 80px rgba(0, 0, 0, 0.5);
+}
+
+.premium-path-chart::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.035);
+  border-bottom: 1px solid rgba(180, 255, 90, 0.04);
+  background:
+    linear-gradient(90deg, transparent, rgba(180, 255, 90, 0.05), transparent),
+    radial-gradient(circle at 68% 48%, rgba(180, 255, 90, 0.04), transparent 30%);
+  opacity: 0.8;
+}
+
+.premium-path-chart .recharts-wrapper {
+  filter: drop-shadow(0 18px 42px rgba(0, 0, 0, 0.35));
+}
+
+.premium-path-chart .cinematic-grid .recharts-cartesian-grid-horizontal line {
+  animation: gridGlow 5.8s ease-in-out infinite;
+}
+
+.premium-path-chart .historical-price-line .recharts-line-curve {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: historicalDraw 1.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.premium-path-chart .future-path-line .recharts-line-curve {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--path-color) 48%, transparent));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation:
+    futureDash var(--path-duration) linear infinite,
+    futureBreath 4.8s ease-in-out infinite;
+  animation-delay: var(--path-delay), var(--path-delay);
+}
+
+.premium-path-chart .future-path-line-active .recharts-line-curve {
+  filter:
+    drop-shadow(0 0 10px var(--path-color))
+    drop-shadow(0 0 24px color-mix(in srgb, var(--path-color) 42%, transparent));
+}
+
+.premium-path-chart .now-reference-line line {
+  filter: drop-shadow(0 0 10px rgba(180, 255, 90, 0.35));
+  animation: nowBeamBreath 3.2s ease-in-out infinite;
+}
+
+.future-zone-flow {
+  background:
+    linear-gradient(110deg, transparent 0%, rgba(180, 255, 90, 0.065) 45%, transparent 72%),
+    radial-gradient(ellipse at center, rgba(180, 255, 90, 0.08), transparent 68%);
+  filter: blur(18px);
+  opacity: 0.75;
+  animation: futureZoneFlow 9s linear infinite;
+}
+
+.now-ring {
+  animation: nowRingPulse 2.4s ease-out infinite;
+}
+
+.now-burst {
+  animation: nowBurstBreath 3.6s ease-in-out infinite;
+}
+
+.now-beam {
+  filter: blur(0.5px) drop-shadow(0 0 18px rgba(180, 255, 90, 0.42));
+  animation: nowBeamBreath 3.2s ease-in-out infinite;
+}
+
+.chart-particle {
+  box-shadow: 0 0 14px rgba(180, 255, 90, 0.7);
+  animation-name: chartParticleDrift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.chart-reflection {
+  animation: chartReflection 7s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.soso-forecast-chart {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.025),
+    0 24px 90px rgba(0, 0, 0, 0.64);
+}
+
+.soso-forecast-chart::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.02)),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.014) 3px, rgba(255, 255, 255, 0.014) 4px);
+}
+
+.soso-forecast-chart .recharts-wrapper {
+  filter: drop-shadow(0 18px 38px rgba(0, 0, 0, 0.45));
+}
+
+.soso-forecast-chart .recharts-cartesian-grid line {
+  opacity: 0.7;
+}
+
+.soso-forecast-chart .soso-actual-line .recharts-line-curve {
+  filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.24));
+  stroke-dasharray: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: none;
+}
+
+.soso-forecast-chart .soso-projection-line .recharts-line-curve {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--path-color) 42%, transparent));
+  animation:
+    futureDash var(--path-duration) linear infinite,
+    futureBreath 5.2s ease-in-out infinite;
+  animation-delay: var(--path-delay), var(--path-delay);
+}
+
+.soso-forecast-chart .soso-projection-line-active .recharts-line-curve {
+  filter:
+    drop-shadow(0 0 8px var(--path-color))
+    drop-shadow(0 0 18px color-mix(in srgb, var(--path-color) 35%, transparent));
+}
+
+.soso-forecast-chart .soso-start-reference line {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
+}
+
+@keyframes historicalDraw {
+  0% {
+    stroke-dasharray: 1600;
+    stroke-dashoffset: 1600;
+    opacity: 0;
+  }
+  100% {
+    stroke-dasharray: 1600;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes futureDash {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -80;
+  }
+}
+
+@keyframes futureBreath {
+  0%,
+  100% {
+    opacity: 0.74;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes gridGlow {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+@keyframes futureZoneFlow {
+  0% {
+    transform: translateX(-20%);
+  }
+  100% {
+    transform: translateX(20%);
+  }
+}
+
+@keyframes nowRingPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.72);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.25);
+    opacity: 0;
+  }
+}
+
+@keyframes nowBurstBreath {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+}
+
+@keyframes nowBeamBreath {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes chartParticleDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.7);
+    opacity: 0.05;
+  }
+  35% {
+    opacity: 0.36;
+  }
+  50% {
+    transform: translate3d(18px, -26px, 0) scale(1);
+    opacity: 0.2;
+  }
+}
+
+@keyframes chartReflection {
+  0%,
+  78%,
+  100% {
+    transform: translateX(-120%) skewX(-20deg);
+    opacity: 0;
+  }
+  84% {
+    opacity: 0.42;
+  }
+  92% {
+    transform: translateX(120%) skewX(-20deg);
+    opacity: 0;
+  }
+}
