@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: narrativeos-api
+    runtime: python
+    plan: free
+    rootDir: services/api
+    buildCommand: "pip install -e ."
+    startCommand: "uvicorn narrativeos_api.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SOSOVALUE_API_KEY
+        sync: false
+      - key: SOSOVALUE_OPENAPI_BASE
+        value: https://openapi.sosovalue.com
+      - key: SOSOVALUE_ETF_API_BASE
+        value: https://api.sosovalue.xyz
+      - key: SOSOVALUE_CACHE_TTL_SECONDS
+        value: "180"
+      - key: SOSOVALUE_STALE_TTL_SECONDS
+        value: "1800"
+      - key: SODEX_SPOT_ENDPOINT
+        value: https://testnet-gw.sodex.dev/api/v1/spot
+      - key: SODEX_PERPS_ENDPOINT
+        value: https://testnet-gw.sodex.dev/api/v1/perps
+      - key: SETTLEMENT_CHAIN_NAME
+        value: Arbitrum Sepolia
+      - key: SETTLEMENT_CHAIN_ID
+        value: "421614"
+      - key: SETTLEMENT_RPC_URL
+        value: https://sepolia-rollup.arbitrum.io/rpc
+      - key: SETTLEMENT_EXPLORER_URL
+        value: https://sepolia.arbiscan.io
+      - key: PATH_MARKET_CONTRACT_ADDRESS
+        sync: false
+      - key: ORACLE_PRIVATE_KEY
+        sync: false
