@@ -5,7 +5,7 @@
 > NarrativeOS turns live SoSoValue market intelligence into structured, evidence-backed Path Contracts: multi-step futures that users can review, publish, and trade on testnet.
 
 <p align="center">
-  <img alt="NarrativeOS banner placeholder" src="docs/assets/narrativeos-banner.svg" width="100%" />
+  <img alt="NarrativeOS cinematic boot banner" src="docs/assets/narrativeos-banner.png" width="100%" />
 </p>
 
 <p align="center">
@@ -237,15 +237,15 @@ AI token news velocity rises
 
 ## Screenshots
 
-> Replace these placeholders with final screenshots from the deployed app.
+Production screenshots from the deployed NarrativeOS experience.
 
-| Market Terminal | Path Builder |
+| Market Terminal | Narrative Intelligence |
 |---|---|
-| ![Market Terminal](docs/assets/screenshots/market-terminal.png) | ![Path Builder](docs/assets/screenshots/path-builder.png) |
+| ![Market Terminal](docs/assets/screenshots/market-terminal.png) | ![Narrative Intelligence](docs/assets/screenshots/narrative-intelligence.png) |
 
-| Evidence Drawer | Agent Timeline |
+| Path Builder | Alpha Signal Stream |
 |---|---|
-| ![Evidence Drawer](docs/assets/screenshots/evidence-drawer.png) | ![Agent Timeline](docs/assets/screenshots/agent-timeline.png) |
+| ![Path Builder](docs/assets/screenshots/path-builder.png) | ![Alpha Signal Stream](docs/assets/screenshots/signal-feed.png) |
 
 ---
 
@@ -263,7 +263,7 @@ AI token news velocity rises
 
 ## Animated SVG Banner Suggestions
 
-Suggested banner asset: `docs/assets/narrativeos-banner.svg`
+Banner asset: `docs/assets/narrativeos-banner.png`
 
 Design direction:
 
