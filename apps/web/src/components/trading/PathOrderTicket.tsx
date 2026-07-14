@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, ExternalLink, Loader2, RefreshCw, Send } from "lucide-react";
-import { parseEther } from "viem";
+import { AlertTriangle, Check, ExternalLink, Loader2, RefreshCw, Send, Trophy } from "lucide-react";
+import { parseEther, type Address } from "viem";
 import {
   useAccount,
   useChainId,
@@ -12,7 +12,7 @@ import {
 } from "wagmi";
 
 import { cn } from "@/lib/cn";
-import { fetchPublishedPathContracts, toApiError } from "@/lib/narrativeApi";
+import { fetchPathMarket, fetchPublishedPathContracts, recordMarketAction, toApiError } from "@/lib/narrativeApi";
 import {
   explorerTxUrl,
   pathMarketAbi,
@@ -20,7 +20,7 @@ import {
   settlementChainId,
   settlementChainName
 } from "@/lib/pathMarket";
-import type { IntelligenceError, PathContract } from "@/lib/types";
+import type { IntelligenceError, PathContract, PathMarketView } from "@/lib/types";
 
 type PathOrderTicketProps = {
   activeContract: PathContract | null;
@@ -40,6 +40,8 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedHash, setSubmittedHash] = useState<`0x${string}` | undefined>();
   const [notifiedHash, setNotifiedHash] = useState<string | null>(null);
+  const [txMode, setTxMode] = useState<"stake" | "claim">("stake");
+  const [marketView, setMarketView] = useState<PathMarketView | null>(null);
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -56,7 +58,7 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
     hash: submittedHash
   });
 
-  const contractAddress = pathMarketAddress();
+  const fallbackContractAddress = pathMarketAddress();
   const marketContracts = useMemo(() => {
     const published = contracts.filter((contract) => contract.status === "published");
     if (activeContract?.status === "published") {
@@ -70,10 +72,18 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
     () => marketContracts.find((contract) => contract.id === selectedContractId) ?? marketContracts[0] ?? null,
     [marketContracts, selectedContractId]
   );
+  const contractAddress =
+    selectedContract?.marketAddress?.startsWith("0x")
+      ? (selectedContract.marketAddress as Address)
+      : fallbackContractAddress;
   const selectedLeg = selectedContract?.legs[selectedLegIndex] ?? selectedContract?.legs[0] ?? null;
   const onchainPathId = selectedContract?.onchainPathId;
   const amountIsValid = Number(amount) > 0;
   const isWrongChain = isConnected && chainId !== settlementChainId;
+  const canClaim =
+    Boolean(isConnected && contractAddress && selectedContract && onchainPathId && selectedContract.status === "resolved" && !isWrongChain) &&
+    !isWriting &&
+    !isConfirming;
   const creatorIsDifferent =
     Boolean(address && selectedContract?.creator) &&
     selectedContract?.creator?.toLowerCase() !== address?.toLowerCase();
@@ -131,12 +141,55 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
   }, [selectedContractId]);
 
   useEffect(() => {
+    if (!selectedContract) {
+      setMarketView(null);
+      return;
+    }
+    const controller = new AbortController();
+    const loadMarket = () => {
+      void fetchPathMarket(selectedContract.id, controller.signal)
+        .then(setMarketView)
+        .catch(() => undefined);
+    };
+    loadMarket();
+    const timer = window.setInterval(loadMarket, 12000);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [selectedContract]);
+
+  useEffect(() => {
     if (isConfirmed && submittedHash && notifiedHash !== submittedHash) {
       setNotifiedHash(submittedHash);
-      onOrderSuccess?.(`Order executed ${shortHash(submittedHash)}`);
+      if (txMode === "stake" && selectedContract) {
+        void recordMarketAction(selectedContract.id, {
+          action: direction,
+          userAddress: address,
+          legIndex: selectedLegIndex,
+          amount,
+          txHash: submittedHash
+        })
+          .then(() => fetchPathMarket(selectedContract.id))
+          .then(setMarketView)
+          .catch(() => undefined);
+      }
+      onOrderSuccess?.(`${txMode === "claim" ? "Reward claimed" : "Order executed"} ${shortHash(submittedHash)}`);
       void loadContracts();
     }
-  }, [isConfirmed, loadContracts, notifiedHash, onOrderSuccess, submittedHash]);
+  }, [
+    address,
+    amount,
+    direction,
+    isConfirmed,
+    loadContracts,
+    notifiedHash,
+    onOrderSuccess,
+    selectedContract,
+    selectedLegIndex,
+    submittedHash,
+    txMode
+  ]);
 
   async function placeOrder() {
     if (!contractAddress || !selectedContract || !selectedLeg || !onchainPathId || !amountIsValid) {
@@ -149,6 +202,7 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
     setSubmitError(null);
 
     try {
+      setTxMode("stake");
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi: pathMarketAbi,
@@ -162,8 +216,32 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
     }
   }
 
+  async function claimReward() {
+    if (!contractAddress || !selectedContract || !onchainPathId) {
+      return;
+    }
+
+    resetWrite();
+    setSubmittedHash(undefined);
+    setNotifiedHash(null);
+    setSubmitError(null);
+    setTxMode("claim");
+
+    try {
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi: pathMarketAbi,
+        functionName: "claimReward",
+        args: [BigInt(onchainPathId)]
+      });
+      setSubmittedHash(txHash);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Reward claim transaction failed");
+    }
+  }
+
   return (
-    <section className="mt-5 rounded-sm border border-[#181818] bg-black/35 p-3">
+    <section id="path-order-execution" className="mt-5 rounded-sm border border-[#181818] bg-black/35 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="label label-active">PATH ORDER EXECUTION</div>
@@ -244,6 +322,8 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
             </div>
           ) : null}
 
+          <QuotePanel market={marketView} />
+
           <div className="grid grid-cols-2 gap-2">
             {(["support", "oppose"] as const).map((side) => (
               <button
@@ -289,7 +369,11 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
             submittedHash={submittedHash}
             isConfirming={isConfirming}
             isConfirmed={isConfirmed}
+            txMode={txMode}
           />
+
+          <LivePoolPanel market={marketView} />
+          <LiveOrderBook market={marketView} />
 
           {isWrongChain ? (
             <button
@@ -302,20 +386,36 @@ export function PathOrderTicket({ activeContract, onOrderSuccess }: PathOrderTic
               Switch to {settlementChainName}
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={() => void placeOrder()}
-              disabled={!canSubmit}
-              className={cn(
-                "mono flex w-full items-center justify-center gap-2 rounded-sm py-3 text-[10px] font-bold uppercase tracking-[0.15em] transition-all",
-                canSubmit
-                  ? "bg-[#b4ff5a] text-black hover:shadow-[0_0_25px_rgba(180,255,90,0.2)]"
-                  : "cursor-not-allowed border border-[#222] bg-[#0a0a0a] text-[#444]"
-              )}
-            >
-              {isWriting || isConfirming ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
-              {isConfirming ? "Confirming order" : "Execute order"}
-            </button>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => void placeOrder()}
+                disabled={!canSubmit}
+                className={cn(
+                  "mono flex w-full items-center justify-center gap-2 rounded-sm py-3 text-[10px] font-bold uppercase tracking-[0.15em] transition-all",
+                  canSubmit
+                    ? "bg-[#b4ff5a] text-black hover:shadow-[0_0_25px_rgba(180,255,90,0.2)]"
+                    : "cursor-not-allowed border border-[#222] bg-[#0a0a0a] text-[#444]"
+                )}
+              >
+                {isWriting || isConfirming ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
+                {isConfirming && txMode === "stake" ? "Confirming order" : "Execute order"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void claimReward()}
+                disabled={!canClaim}
+                className={cn(
+                  "mono flex w-full items-center justify-center gap-2 rounded-sm border py-3 text-[10px] font-bold uppercase tracking-[0.15em] transition-all",
+                  canClaim
+                    ? "border-[#b4ff5a] text-[#b4ff5a] hover:bg-[#b4ff5a] hover:text-black"
+                    : "cursor-not-allowed border-[#222] bg-[#0a0a0a] text-[#444]"
+                )}
+              >
+                {isWriting || isConfirming ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Trophy className="size-4" aria-hidden />}
+                {isConfirming && txMode === "claim" ? "Confirming claim" : "Claim reward"}
+              </button>
+            </div>
           )}
         </div>
       ) : (
@@ -344,7 +444,8 @@ function ExecutionBlock({
   loadError,
   submittedHash,
   isConfirming,
-  isConfirmed
+  isConfirmed,
+  txMode
 }: {
   isConnected: boolean;
   isWrongChain: boolean;
@@ -357,6 +458,7 @@ function ExecutionBlock({
   submittedHash?: `0x${string}`;
   isConfirming: boolean;
   isConfirmed: boolean;
+  txMode: "stake" | "claim";
 }) {
   const rows = [
     { label: "Wallet connected", ready: isConnected, hard: true },
@@ -390,7 +492,15 @@ function ExecutionBlock({
           className="mono mt-3 flex items-center justify-between gap-3 rounded-sm border border-[#182810] bg-[#071006] px-3 py-2 text-[9px] uppercase tracking-widest text-[#b4ff5a]"
         >
           <span>
-            {isConfirmed ? "Order confirmed" : isConfirming ? "Order submitted" : "Transaction sent"}
+            {isConfirmed
+              ? txMode === "claim"
+                ? "Reward claim confirmed"
+                : "Order confirmed"
+              : isConfirming
+                ? txMode === "claim"
+                  ? "Reward claim submitted"
+                  : "Order submitted"
+                : "Transaction sent"}
           </span>
           <span className="inline-flex items-center gap-1">
             {shortHash(submittedHash)}
@@ -404,6 +514,109 @@ function ExecutionBlock({
           {submitError ?? writeError?.message ?? loadError?.message}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function LivePoolPanel({ market }: { market: PathMarketView | null }) {
+  const pool = market?.pool;
+  return (
+    <section className="rounded-sm border border-[#101010] bg-[#050505] p-3">
+      <div className="label label-active">LIVE POOL</div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <PoolMetric label="Total Liquidity" value={`${pool?.totalLiquidity ?? "0"} ETH`} />
+        <PoolMetric label="Participants" value={String(pool?.participantCount ?? 0)} />
+        <PoolMetric label="Bull Stakes" value={`${pool?.supportTotal ?? "0"} ETH`} />
+        <PoolMetric label="Bear Stakes" value={`${pool?.opposeTotal ?? "0"} ETH`} />
+        <PoolMetric label="Average Entry" value={`${pool?.averageEntry ?? "0"} ETH`} />
+        <PoolMetric label="Largest Position" value={`${pool?.largestPosition ?? "0"} ETH`} />
+      </div>
+      <div className="mt-3 overflow-hidden rounded-sm border border-[#111] bg-black">
+        <div className="h-2 bg-[#ff7744]">
+          <div
+            className="h-full bg-[#b4ff5a]"
+            style={{ width: `${pool?.supportShare ?? 0}%` }}
+          />
+        </div>
+        <div className="mono flex justify-between px-2 py-1 text-[8px] uppercase tracking-widest text-[#555]">
+          <span>Support {pool?.supportShare ?? 0}%</span>
+          <span>Oppose {pool?.opposeShare ?? 0}%</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function QuotePanel({ market }: { market: PathMarketView | null }) {
+  const pricing = market?.pricing;
+  return (
+    <section className="rounded-sm border border-[#101010] bg-[#050505] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="label label-active">PATH QUOTE</div>
+        <span className="mono text-[8px] uppercase tracking-widest text-[#444]">
+          {pricing?.marketDepth ?? "awaiting market"}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <PoolMetric label="Support Bid / Ask" value={pricing ? `${pricing.supportBid} / ${pricing.supportAsk}` : "-- / --"} />
+        <PoolMetric label="Oppose Bid / Ask" value={pricing ? `${pricing.opposeBid} / ${pricing.opposeAsk}` : "-- / --"} />
+        <PoolMetric label="Spread" value={pricing ? `${pricing.spreadBps} bps` : "--"} />
+        <PoolMetric label="Slippage" value={pricing ? `${pricing.defaultStakeSlippageBps} bps` : "--"} />
+      </div>
+      <p className="mt-3 text-[11px] leading-5 text-[#666]">
+        {pricing?.feedbackLoop ?? "Quote appears after the market state loads from the NarrativeOS backend."}
+      </p>
+    </section>
+  );
+}
+
+function LiveOrderBook({ market }: { market: PathMarketView | null }) {
+  const orders = market?.latestOrders ?? [];
+  return (
+    <section className="rounded-sm border border-[#101010] bg-[#050505] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="label label-active">LIVE ORDER BOOK</div>
+        <span className="mono text-[8px] uppercase tracking-widest text-[#444]">
+          {orders.length ? "polling 12s" : "awaiting fills"}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {orders.length ? (
+          orders.slice(0, 5).map((order) => (
+            <a
+              key={order.id}
+              href={order.explorerUrl ?? undefined}
+              target={order.explorerUrl ? "_blank" : undefined}
+              rel="noreferrer"
+              className="grid gap-2 rounded-sm border border-[#111] bg-black p-2 text-xs text-[#777] hover:border-[#333]"
+            >
+              <div className="mono flex items-center justify-between gap-2 text-[9px] uppercase tracking-widest">
+                <span className={order.action === "support" ? "text-[#b4ff5a]" : "text-[#ff7744]"}>
+                  {order.directionLabel}
+                </span>
+                <span className="text-white">{order.amount} ETH</span>
+              </div>
+              <div className="mono flex items-center justify-between gap-2 text-[8px] uppercase tracking-widest text-[#444]">
+                <span>{order.userAddress ? shortAddress(order.userAddress) : "unknown wallet"}</span>
+                <span>{order.txHash ? shortHash(order.txHash) : "pending hash"}</span>
+              </div>
+            </a>
+          ))
+        ) : (
+          <div className="rounded-sm border border-[#151515] bg-black p-3 text-xs leading-5 text-[#666]">
+            Confirmed support and oppose transactions appear here after wallet settlement.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PoolMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-sm border border-[#151515] bg-black/70 p-2">
+      <div className="mono text-[8px] uppercase tracking-widest text-[#444]">{label}</div>
+      <div className="mono mt-1 truncate text-[11px] font-bold text-white">{value}</div>
     </div>
   );
 }

@@ -57,6 +57,37 @@ PATH_MARKET_ABI = [
     },
 ]
 
+PATH_MARKET_FACTORY_ABI = [
+    {
+        "type": "event",
+        "name": "FactoryMarketCreated",
+        "anonymous": False,
+        "inputs": [
+            {"name": "market", "type": "address", "indexed": True},
+            {"name": "creator", "type": "address", "indexed": True},
+            {"name": "pathId", "type": "uint256", "indexed": True},
+            {"name": "termsHash", "type": "bytes32", "indexed": False},
+            {"name": "legCount", "type": "uint8", "indexed": False},
+            {"name": "settlementTimestamp", "type": "uint64", "indexed": False},
+            {"name": "creatorStake", "type": "uint256", "indexed": False},
+        ],
+    },
+    {
+        "type": "function",
+        "name": "createMarket",
+        "stateMutability": "payable",
+        "inputs": [
+            {"name": "termsHash", "type": "bytes32"},
+            {"name": "legCount", "type": "uint8"},
+            {"name": "settlementTimestamp", "type": "uint64"},
+        ],
+        "outputs": [
+            {"name": "marketAddress", "type": "address"},
+            {"name": "pathId", "type": "uint256"},
+        ],
+    },
+]
+
 
 class SettlementExecutor:
     def __init__(self, settings: Settings):
@@ -69,7 +100,10 @@ class SettlementExecutor:
             abi=PATH_MARKET_ABI,
         )
 
-    def publish_linear_path(self, contract: PathContract) -> tuple[str, int | None]:
+    def publish_linear_path(self, contract: PathContract) -> tuple[str, int | None, str | None]:
+        if self._settings.path_market_factory_address:
+            return self._publish_via_factory(contract)
+
         stake_wei = int(Decimal(contract.stake_amount) * Decimal(10**18))
         transaction = self._contract.functions.createLinearPath(
             bytes.fromhex(contract.terms_hash.removeprefix("0x")), len(contract.legs)
@@ -78,7 +112,27 @@ class SettlementExecutor:
         receipt = self._web3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         events = self._contract.events.PathCreated().process_receipt(receipt, errors=DISCARD)
         path_id = int(events[0]["args"]["pathId"]) if events else None
-        return tx_hash, path_id
+        return tx_hash, path_id, self._settings.path_market_contract_address
+
+    def _publish_via_factory(self, contract: PathContract) -> tuple[str, int | None, str | None]:
+        stake_wei = int(Decimal(contract.stake_amount) * Decimal(10**18))
+        factory = self._web3.eth.contract(
+            address=Web3.to_checksum_address(self._settings.path_market_factory_address),
+            abi=PATH_MARKET_FACTORY_ABI,
+        )
+        settlement_timestamp = self._settlement_timestamp()
+        transaction = factory.functions.createMarket(
+            bytes.fromhex(contract.terms_hash.removeprefix("0x")),
+            len(contract.legs),
+            settlement_timestamp,
+        ).build_transaction(self._tx_base(value=stake_wei))
+        tx_hash = self._sign_and_send(transaction)
+        receipt = self._web3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        events = factory.events.FactoryMarketCreated().process_receipt(receipt, errors=DISCARD)
+        if not events:
+            return tx_hash, None, None
+        args = events[0]["args"]
+        return tx_hash, int(args["pathId"]), str(args["market"])
 
     def resolve_leg(self, path_id: int, leg_index: int, confirmed: bool, evidence_hash: str) -> str:
         transaction = self._contract.functions.resolveLeg(
@@ -107,3 +161,9 @@ class SettlementExecutor:
         signed = self._account.sign_transaction({**transaction, "gas": gas})
         tx_hash = self._web3.eth.send_raw_transaction(signed.raw_transaction)
         return self._web3.to_hex(tx_hash)
+
+    @staticmethod
+    def _settlement_timestamp() -> int:
+        import time
+
+        return int(time.time()) + (14 * 24 * 60 * 60)

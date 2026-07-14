@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import "../src/PathMarket.sol";
+import "../src/MarketRegistry.sol";
+import "../src/PathMarketFactory.sol";
 
 contract PathMarketActor {
     receive() external payable {}
@@ -39,7 +41,7 @@ contract PathMarketTest {
     constructor() payable {}
 
     function _setup() private {
-        market = new PathMarket(address(this));
+        market = new PathMarket(address(this), address(this));
         alice = new PathMarketActor();
         bob = new PathMarketActor();
         payable(address(alice)).transfer(20 ether);
@@ -111,5 +113,41 @@ contract PathMarketTest {
         uint256 beforeBalance = address(bob).balance;
         bob.claim(market, pathId);
         require(address(bob).balance == beforeBalance + 2 ether, "future leg was not refunded");
+    }
+
+    function testClaimRewardAliasAndPoolSummary() public {
+        _setup();
+        uint256 pathId = alice.create{value: 1 ether}(market, keccak256("terms"), 1);
+        bob.stake{value: 1 ether}(market, pathId, 0, false);
+
+        market.resolveLeg(pathId, 0, false, keccak256("evidence"));
+        (uint256 totalLiquidity, uint256 supportTotal, uint256 opposeTotal,,) = market.poolSummary(pathId);
+        require(totalLiquidity == 2 ether, "pool total mismatch");
+        require(supportTotal == 1 ether, "support total mismatch");
+        require(opposeTotal == 1 ether, "oppose total mismatch");
+
+        uint256 beforeBalance = address(bob).balance;
+        (bool ok,) = address(bob).call(
+            abi.encodeWithSelector(PathMarketActor.claim.selector, market, pathId)
+        );
+        require(ok, "claimReward-compatible claim failed");
+        require(address(bob).balance > beforeBalance, "winner did not receive reward");
+    }
+
+    function testFactoryCreatesRegisteredMarket() public {
+        MarketRegistry registry = new MarketRegistry(address(this));
+        PathMarketFactory factory = new PathMarketFactory(address(this), registry, address(this));
+        registry.setFactory(address(factory));
+
+        (address marketAddress, uint256 pathId) = factory.createMarket{value: 1 ether}(
+            keccak256("factory-terms"),
+            3,
+            uint64(block.timestamp + 7 days)
+        );
+
+        require(pathId == 1, "factory path id mismatch");
+        require(registry.marketCount() == 1, "registry count mismatch");
+        require(registry.marketAt(0) == marketAddress, "registry market mismatch");
+        require(registry.isRegisteredMarket(marketAddress), "market not registered");
     }
 }

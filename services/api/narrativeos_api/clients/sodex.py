@@ -16,6 +16,10 @@ class SoDEXClient:
         payload = await self._get(f"{self._settings.sodex_spot_endpoint}/markets/symbols")
         return list(payload.get("data") or [])
 
+    async def perps_symbols(self) -> list[dict[str, Any]]:
+        payload = await self._get(f"{self._settings.sodex_perps_endpoint}/markets/symbols")
+        return list(payload.get("data") or [])
+
     async def spot_account_state(self, user_address: str) -> dict[str, Any]:
         payload = await self._get(f"{self._settings.sodex_spot_endpoint}/accounts/{user_address}/state")
         return dict(payload.get("data") or {})

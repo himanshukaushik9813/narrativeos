@@ -17,6 +17,7 @@ import { defaultPathKey, pathOptions } from "@/lib/mockData";
 import {
   draftPathContract,
   fetchMarketChart,
+  fetchSoDEXContext,
   fetchTopNarratives,
   publishPathContract,
   toApiError
@@ -27,7 +28,8 @@ import type {
   MarketChartResponse,
   NarrativeTheme,
   PathContract,
-  PathKey
+  PathKey,
+  SoDEXMarketContext
 } from "@/lib/types";
 
 export function MarketTerminal() {
@@ -39,6 +41,7 @@ export function MarketTerminal() {
   const [narratives, setNarratives] = useState<NarrativeTheme[]>([]);
   const [contract, setContract] = useState<PathContract | null>(null);
   const [marketChart, setMarketChart] = useState<MarketChartResponse | null>(null);
+  const [sodexContext, setSodexContext] = useState<SoDEXMarketContext | null>(null);
   const [marketChartError, setMarketChartError] = useState<IntelligenceError | null>(null);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [intelligenceStatus, setIntelligenceStatus] = useState<IntelligenceStatus>("idle");
@@ -124,6 +127,7 @@ export function MarketTerminal() {
     const controller = new AbortController();
     void loadLiveDraft(controller.signal);
     void loadMarketChart(controller.signal);
+    void fetchSoDEXContext(controller.signal).then(setSodexContext).catch(() => undefined);
     return () => controller.abort();
   }, [loadLiveDraft, loadMarketChart]);
 
@@ -163,12 +167,16 @@ export function MarketTerminal() {
 
   return (
     <motion.main
-      initial={{ opacity: 0 }}
+      initial={false}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
       className="relative min-h-screen overflow-hidden bg-black px-4 pb-10 pt-20"
     >
       <AtmosphericBackground />
+      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-4">
+        <ProtocolFlowStrip />
+        <JudgeClarityPanel sodexContext={sodexContext} contract={contract} />
+      </div>
       <div className="relative z-10 mx-auto flex max-w-7xl flex-col items-center gap-6 xl:flex-row xl:items-start xl:justify-center">
         <FloatingTerminal>
           <div className="grid overflow-hidden rounded-sm lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -261,6 +269,102 @@ function normalizeStake(value: string) {
 
 function shortHash(value: string) {
   return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
+function ProtocolFlowStrip() {
+  const stages = ["SoSoValue", "AI Agents", "Evidence", "Probability", "Path Contract", "Stakes", "Settlement", "Reputation"];
+  return (
+    <section className="rounded-sm border border-[#121912] bg-[#030503]/80 p-3">
+      <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+        {stages.map((stage, index) => (
+          <div key={stage} className="relative rounded-sm border border-[#151515] bg-black px-3 py-2">
+            <div className="mono text-[8px] uppercase tracking-widest text-[#35502c]">{String(index + 1).padStart(2, "0")}</div>
+            <div className="mono mt-1 text-[10px] font-bold uppercase tracking-widest text-[#d8d8d8]">{stage}</div>
+            {index < stages.length - 1 ? (
+              <div className="absolute -right-1 top-1/2 hidden h-px w-2 bg-[#b4ff5a]/35 xl:block" />
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function JudgeClarityPanel({
+  sodexContext,
+  contract
+}: {
+  sodexContext: SoDEXMarketContext | null;
+  contract: PathContract | null;
+}) {
+  const rows = [
+    {
+      label: "1 / Detect",
+      title: "SoSoValue signal intake",
+      body: "Featured news, matched currencies, ETF metrics, and ETF inflow history become the only evidence allowed into the agent pipeline."
+    },
+    {
+      label: "2 / Price",
+      title: "Deterministic path quote",
+      body: "Probability is computed from evidence quality, agent confidence, risk, and confirmed stake feedback; thin markets are discounted."
+    },
+    {
+      label: "3 / Publish",
+      title: "Terms hash on-chain",
+      body: "The reviewed path publishes to the configured Arbitrum Sepolia PathMarket contract with an explorer-verifiable transaction."
+    },
+    {
+      label: "4 / Trade",
+      title: "Stake into any creator path",
+      body: "Users support or oppose individual legs through wallet transactions; confirmed orders feed back into market depth and pricing."
+    }
+  ];
+
+  return (
+    <section className="rounded-sm border border-[#151515] bg-[#050505]/86 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="label label-active">JUDGE QUICK READ</div>
+          <h1 className="mono mt-2 text-xl font-bold uppercase tracking-widest text-white">
+            Live narratives become priced, tradeable path contracts.
+          </h1>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-[#777]">
+            NarrativeOS is not a generic signal dashboard: it converts live SoSoValue evidence into structured contract legs, computes an auditable probability quote, publishes terms on-chain, and lets the market stake against the thesis.
+          </p>
+        </div>
+        <div className="grid min-w-[260px] gap-2 sm:grid-cols-2">
+          <StatusTile label="Current Draft" value={contract ? contract.status : "loading"} />
+          <StatusTile
+            label="SoDEX Context"
+            value={sodexContext ? `${sodexContext.status} / ${sodexContext.spotSymbols + sodexContext.perpsSymbols} symbols` : "checking"}
+          />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        {rows.map((row) => (
+          <article key={row.label} className="rounded-sm border border-[#151515] bg-black p-3">
+            <div className="mono text-[8px] uppercase tracking-widest text-[#b4ff5a]">{row.label}</div>
+            <div className="mono mt-2 text-[10px] font-bold uppercase tracking-widest text-white">{row.title}</div>
+            <p className="mt-2 text-xs leading-5 text-[#666]">{row.body}</p>
+          </article>
+        ))}
+      </div>
+      {sodexContext ? (
+        <div className="mono mt-3 rounded-sm border border-[#111] bg-black px-3 py-2 text-[9px] uppercase tracking-widest text-[#555]">
+          {sodexContext.note}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function StatusTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-sm border border-[#151515] bg-black p-3">
+      <div className="mono text-[8px] uppercase tracking-widest text-[#444]">{label}</div>
+      <div className="mono mt-1 truncate text-[11px] font-bold uppercase tracking-widest text-[#b4ff5a]">{value}</div>
+    </div>
+  );
 }
 
 function AtmosphericBackground() {

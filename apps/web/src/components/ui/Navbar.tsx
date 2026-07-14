@@ -1,15 +1,16 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/cn";
 
 const navItems = [
   { href: "/", label: "MARKET" },
+  { href: "/markets", label: "MARKETS" },
   { href: "/narratives", label: "NARRATIVES" },
   { href: "/build", label: "CONTRACTS" },
+  { href: "/portfolio", label: "PORTFOLIO" },
   { href: "/feed", label: "FEED" }
 ];
 
@@ -18,17 +19,17 @@ export function Navbar() {
 
   return (
     <header
-      className="fixed left-0 right-0 top-0 z-50 flex items-center justify-between px-6 py-4"
+      className="fixed left-0 right-0 top-0 z-[120] flex items-center justify-between px-6 py-4"
       style={{ borderBottom: "1px solid #0f0f0f", background: "rgba(0,0,0,0.8)", backdropFilter: "blur(20px)" }}
     >
-      <Link href="/" className="mono text-sm font-bold tracking-[0.1em] text-white">
+      <a href="/" className="mono text-sm font-bold tracking-[0.1em] text-white">
         <span className="text-[#b4ff5a]">[✕]</span> NARRATIVEOS
-      </Link>
-      <nav className="hidden items-center gap-8 sm:flex">
+      </a>
+      <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:gap-5">
         {navItems.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
-            <Link
+            <a
               key={item.href}
               href={item.href}
               className={cn(
@@ -37,7 +38,7 @@ export function Navbar() {
               )}
             >
               {item.label}
-            </Link>
+            </a>
           );
         })}
       </nav>

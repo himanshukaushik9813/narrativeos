@@ -8,35 +8,38 @@ import { MarketTerminal } from "@/components/MarketTerminal";
 const BOOT_STORAGE_KEY = "narrativeos.booted";
 
 export function MainExperience() {
-  const [bootComplete, setBootComplete] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
+  const [showBoot, setShowBoot] = useState(false);
 
   const completeBoot = useCallback(() => {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(BOOT_STORAGE_KEY, "true");
     }
 
-    setBootComplete(true);
+    setShowBoot(false);
   }, []);
 
   useEffect(() => {
-    if (bootComplete) {
-      return;
+    setHasMounted(true);
+    if (window.sessionStorage.getItem(BOOT_STORAGE_KEY) !== "true") {
+      setShowBoot(true);
     }
+  }, []);
 
-    if (window.sessionStorage.getItem(BOOT_STORAGE_KEY) === "true") {
-      setBootComplete(true);
+  useEffect(() => {
+    if (!showBoot) {
       return;
     }
 
     const fallbackTimer = window.setTimeout(completeBoot, 7000);
 
     return () => window.clearTimeout(fallbackTimer);
-  }, [bootComplete, completeBoot]);
+  }, [showBoot, completeBoot]);
 
   return (
     <>
-      {!bootComplete ? <IntroScreen onComplete={completeBoot} /> : null}
       <MarketTerminal />
+      {hasMounted && showBoot ? <IntroScreen onComplete={completeBoot} /> : null}
     </>
   );
 }

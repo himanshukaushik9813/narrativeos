@@ -29,7 +29,7 @@ export function FloatingTerminal({ children }: { children: ReactNode }) {
         x.set(0);
         y.set(0);
       }}
-      initial={{ opacity: 0, y: 40, rotateX: 8 }}
+      initial={false}
       animate={{ opacity: 1, y: 0, rotateX: 0 }}
       transition={{ duration: 1, ease: terminalEase }}
       className="w-full"

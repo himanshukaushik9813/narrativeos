@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import html
 import json
 import re
 from collections import Counter, defaultdict
@@ -19,6 +18,7 @@ from narrativeos_api.models import (
     PathLeg,
     utc_now_iso,
 )
+from narrativeos_api.text import english_identifier, english_text, english_title
 
 TAG_STOPLIST = {
     "BTC",
@@ -114,7 +114,7 @@ def build_narratives(
             )
 
         for currency in _matched_currencies(item):
-            symbol = currency.upper()
+            symbol = currency
             key = f"currency:{symbol}"
             currency_counts[symbol] += 1
             engagement[key] += quote_score
@@ -186,6 +186,8 @@ def build_path_contract(
     metadata = theme.metadata
     kind = metadata.get("kind", "signal")
     key = metadata.get("key", theme.title)
+    safe_theme_title = english_title(theme.title, "SoSoValue Narrative Path")
+    safe_contract_title = english_title(f"{safe_theme_title} - linear path", "SoSoValue Narrative Path - Linear Path")
     observed_count = int(metadata.get("count") or 1)
     engagement_score = int(metadata.get("engagement") or 0)
     etf_flow = _decimal_from_any(metadata.get("three_day_net_inflow"))
@@ -225,7 +227,7 @@ def build_path_contract(
             ),
         ]
     else:
-        readable_key = key.replace("tag:", "").replace("currency:", "")
+        readable_key = english_text(key.replace("tag:", "").replace("currency:", ""), "SoSoValue signal")
         legs = [
             PathLeg(
                 leg=1,
@@ -264,7 +266,7 @@ def build_path_contract(
             "strategy_agent": {
                 **context.strategy_agent,
                 "suggested_contract": {
-                    "title": f"{theme.title} - linear path",
+                    "title": safe_contract_title,
                     "structure": "linear",
                     "payout_model": "graduated_per_leg",
                     "stake_token": "Arbitrum Sepolia ETH",
@@ -278,8 +280,8 @@ def build_path_contract(
     )
 
     payload_for_hash = {
-        "title": f"{theme.title} - linear path",
-        "theme": theme.title,
+        "title": safe_contract_title,
+        "theme": safe_theme_title,
         "structure": "linear",
         "legs": [leg.model_dump(mode="json", by_alias=True) for leg in legs],
         "stakeAmount": stake_amount,
@@ -294,8 +296,8 @@ def build_path_contract(
 
     return PathContract(
         id=path_id,
-        title=f"{theme.title} - linear path",
-        theme=theme.title,
+        title=safe_contract_title,
+        theme=safe_theme_title,
         legs=legs,
         confidence=theme.confidence,
         risk=theme.risk,
@@ -399,10 +401,11 @@ def _theme_from_etf(
 
 
 def _market_dna(theme: NarrativeTheme, legs: list[PathLeg]) -> str:
-    drivers = "; ".join(item.label for item in theme.evidence[:3])
+    safe_theme_title = english_title(theme.title, "SoSoValue Narrative Path")
+    drivers = "; ".join(english_text(item.label, "SoSoValue evidence") for item in theme.evidence[:3])
     leg_summary = " -> ".join(leg.metric_source for leg in legs)
     return (
-        f"{theme.title} is supported by live SoSoValue evidence: {drivers}. "
+        f"{safe_theme_title} is supported by live SoSoValue evidence: {drivers}. "
         f"The proposed path evaluates {leg_summary}, with graduated settlement per confirmed leg."
     )
 
@@ -411,9 +414,9 @@ def _tags(item: dict[str, Any]) -> list[str]:
     tags = item.get("tags") or []
     clean = []
     for tag in tags:
-        value = str(tag).strip()
+        value = english_identifier(tag)
         if value:
-            clean.append(value.upper())
+            clean.append(value)
     return clean
 
 
@@ -421,9 +424,29 @@ def _matched_currencies(item: dict[str, Any]) -> list[str]:
     currencies = item.get("matchedCurrencies") or []
     symbols = []
     for currency in currencies:
-        value = currency.get("name") or currency.get("currencyName") if isinstance(currency, dict) else None
+        value = None
+        if isinstance(currency, dict):
+            for field in (
+                "symbol",
+                "ticker",
+                "currency",
+                "currencySymbol",
+                "code",
+                "baseAsset",
+                "baseSymbol",
+                "name",
+                "currencyName",
+            ):
+                candidate = currency.get(field)
+                if candidate:
+                    value = candidate
+                    break
+        else:
+            value = currency
         if value:
-            symbols.append(str(value))
+            symbol = english_identifier(value)
+            if symbol:
+                symbols.append(symbol)
     return symbols
 
 
@@ -431,15 +454,10 @@ def _title(item: dict[str, Any]) -> str:
     contents = item.get("multilanguageContent") or []
     for content in contents:
         if isinstance(content, dict) and str(content.get("language")).lower() == "en":
-            return _strip_html(str(content.get("title") or content.get("content") or ""))
+            return english_text(content.get("title") or content.get("content"), "SoSoValue featured news signal")
     if contents and isinstance(contents[0], dict):
-        return _strip_html(str(contents[0].get("title") or contents[0].get("content") or ""))
-    return str(item.get("id") or "SoSoValue signal")
-
-
-def _strip_html(value: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html.unescape(value))
-    return re.sub(r"\s+", " ", text).strip()
+        return english_text(contents[0].get("title") or contents[0].get("content"), "SoSoValue featured news signal")
+    return english_text(item.get("id"), "SoSoValue featured news signal")
 
 
 def _release_time(item: dict[str, Any]) -> str | None:

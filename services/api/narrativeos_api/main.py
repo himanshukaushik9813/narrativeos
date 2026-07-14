@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,13 +16,26 @@ from narrativeos_api.execution import SettlementExecutor
 from narrativeos_api.models import (
     DraftPathRequest,
     HealthResponse,
+    CreatorLeaderboardResponse,
+    HistoricalLearningResponse,
+    MarketAction,
+    MarketActionRequest,
     MarketChartResponse,
+    MarketsResponse,
     NarrativesResponse,
     PathContract,
     PathContractsResponse,
+    PortfolioResponse,
     PublishPathRequest,
     ResolveLegRequest,
+    SoDEXMarketContext,
     utc_now_iso,
+)
+from narrativeos_api.protocol import (
+    build_markets_response,
+    creator_leaderboard,
+    historical_learning,
+    portfolio_for,
 )
 from narrativeos_api.repository import repository
 
@@ -117,6 +131,7 @@ async def publish_path_contract(
 
     if request.tx_hash:
         contract.tx_hash = request.tx_hash
+        contract.market_address = contract.market_address or settings.path_market_contract_address
         contract.status = "published"
         contract.agent_context.execution_agent = {
             "mode": "wallet",
@@ -132,9 +147,10 @@ async def publish_path_contract(
         )
 
     executor = SettlementExecutor(settings)
-    tx_hash, onchain_path_id = executor.publish_linear_path(contract)
+    tx_hash, onchain_path_id, market_address = executor.publish_linear_path(contract)
     contract.tx_hash = tx_hash
     contract.onchain_path_id = onchain_path_id
+    contract.market_address = market_address
     contract.status = "published"
     contract.agent_context.execution_agent = {
         "mode": "server-relay",
@@ -162,9 +178,103 @@ async def get_path_contract(path_id: str) -> PathContract:
     return contract
 
 
+@app.get("/api/markets", response_model=MarketsResponse)
+async def list_markets(
+    include_live_candidates: bool = True,
+    settings: Settings = Depends(settings_dep),
+) -> MarketsResponse:
+    contracts = repository.list()
+    if include_live_candidates and not contracts:
+        try:
+            client = SoSoValueClient(settings)
+            narratives, context = await run_agent_pipeline(client)
+            for theme in narratives[:3]:
+                candidate = build_path_contract(theme, "0.001", None, context)
+                existing = repository.get(candidate.id)
+                if existing is None or existing.status == "draft":
+                    repository.upsert(candidate)
+        except (SoSoValueError, MissingIntegrationConfig):
+            if not contracts:
+                raise
+
+    return build_markets_response(repository.list(), repository, settings)
+
+
+@app.get("/api/markets/{contract_id}")
+async def get_market(contract_id: str, settings: Settings = Depends(settings_dep)):
+    contract = repository.get(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Path market not found")
+    return build_markets_response([contract], repository, settings).markets[0]
+
+
+@app.post("/api/markets/{contract_id}/actions", response_model=MarketAction)
+async def record_market_action(contract_id: str, request: MarketActionRequest) -> MarketAction:
+    contract = repository.get(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Path market not found")
+    if request.action in {"support", "oppose"}:
+        if contract.status != "published" or not contract.onchain_path_id:
+            raise HTTPException(status_code=400, detail="Stake actions require a published on-chain path")
+        if not request.amount:
+            raise HTTPException(status_code=400, detail="Stake actions require an amount")
+        if not request.tx_hash:
+            raise HTTPException(status_code=400, detail="Stake actions require a settlement transaction hash")
+    if request.action == "comment" and not request.comment:
+        raise HTTPException(status_code=400, detail="Comment actions require comment text")
+    return repository.record_market_action(contract_id, request)
+
+
+@app.get("/api/portfolio/{address}", response_model=PortfolioResponse)
+async def get_portfolio(address: str, settings: Settings = Depends(settings_dep)) -> PortfolioResponse:
+    return portfolio_for(address, repository, settings)
+
+
+@app.get("/api/creators/leaderboard", response_model=CreatorLeaderboardResponse)
+async def get_creator_leaderboard() -> CreatorLeaderboardResponse:
+    return creator_leaderboard(repository)
+
+
+@app.get("/api/history/learning", response_model=HistoricalLearningResponse)
+async def get_historical_learning() -> HistoricalLearningResponse:
+    return historical_learning(repository)
+
+
 @app.get("/api/sodex/spot/symbols")
 async def sodex_spot_symbols(settings: Settings = Depends(settings_dep)):
     return {"symbols": await SoDEXClient(settings).spot_symbols()}
+
+
+@app.get("/api/sodex/context", response_model=SoDEXMarketContext)
+async def sodex_market_context(settings: Settings = Depends(settings_dep)) -> SoDEXMarketContext:
+    client = SoDEXClient(settings)
+    try:
+        spot_symbols = await client.spot_symbols()
+        try:
+            perps_symbols = await client.perps_symbols()
+            status: Literal["online", "degraded", "unavailable"] = "online"
+        except httpx.HTTPError:
+            perps_symbols = []
+            status = "degraded"
+    except httpx.HTTPError:
+        return SoDEXMarketContext(
+            status="unavailable",
+            spot_symbols=0,
+            perps_symbols=0,
+            reference_symbols=[],
+            note="SoDEX context is unavailable. Path Contract settlement remains on the configured EVM contract; no synthetic exchange data is used.",
+            updated_at=utc_now_iso(),
+        )
+
+    reference_symbols = _symbol_names(spot_symbols + perps_symbols)[:8]
+    return SoDEXMarketContext(
+        status=status,
+        spot_symbols=len(spot_symbols),
+        perps_symbols=len(perps_symbols),
+        reference_symbols=reference_symbols,
+        note="SoDEX is used as live exchange context for spot/perps availability. Path Contracts publish and settle through the EVM PathMarket contract, not a fabricated SoDEX endpoint.",
+        updated_at=utc_now_iso(),
+    )
 
 
 @app.get("/api/sodex/accounts/{user_address}/state")
@@ -179,3 +289,22 @@ async def resolve_leg(request: ResolveLegRequest, settings: Settings = Depends(s
         request.path_id, request.leg_index, request.confirmed, request.evidence_hash
     )
     return {"txHash": tx_hash, "status": "submitted"}
+
+
+def _symbol_names(symbols: list[dict]) -> list[str]:
+    names: list[str] = []
+    seen = set()
+    for symbol in symbols:
+        value = (
+            symbol.get("symbol")
+            or symbol.get("name")
+            or symbol.get("market")
+            or symbol.get("pair")
+        )
+        if value is None:
+            continue
+        text = str(value)
+        if text and text not in seen:
+            names.append(text)
+            seen.add(text)
+    return names

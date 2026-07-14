@@ -1,3 +1,5 @@
+import json
+
 from narrativeos_api.agents import build_narratives, build_path_contract
 from narrativeos_api.models import AgentContext
 
@@ -48,3 +50,40 @@ def test_agent_context_is_preserved_when_building_contract():
     assert contract.agent_context.strategy_agent["supported_structure"] == "linear"
     assert contract.agent_context.strategy_agent["suggested_contract"]["stake_token"] == "Arbitrum Sepolia ETH"
     assert contract.terms_hash.startswith("0x")
+
+
+def test_agent_pipeline_filters_non_english_sosovalue_labels():
+    news = [
+        {
+            "id": "n-cn",
+            "sourceLink": "https://sosovalue.xyz/research/cn",
+            "releaseTime": 1710000000000,
+            "tags": ["三星电子"],
+            "matchedCurrencies": [{"name": "三星电子"}],
+            "quoteInfo": {"impressionCount": 500, "likeCount": 20},
+            "multilanguageContent": [{"language": "zh", "title": "三星电子 市场 新闻"}],
+        },
+        {
+            "id": "n-btc",
+            "sourceLink": "https://sosovalue.xyz/research/btc",
+            "releaseTime": 1710000001000,
+            "tags": ["Bitcoin"],
+            "matchedCurrencies": [{"symbol": "BTC", "name": "比特币"}],
+            "quoteInfo": {"impressionCount": 100},
+            "multilanguageContent": [{"language": "en", "title": "Bitcoin ETF flows stabilize"}],
+        },
+    ]
+
+    themes = build_narratives(
+        news=news,
+        btc_current={"dailyNetInflow": {"value": 1000}, "cumNetInflow": {"value": 5000}},
+        eth_current={},
+        btc_history=[{"totalNetInflow": 1000}, {"totalNetInflow": 2000}, {"totalNetInflow": -500}],
+        eth_history=[],
+        snapshot_time="2026-05-24T00:00:00+00:00",
+    )
+
+    serialized = json.dumps([theme.model_dump(mode="json", by_alias=True) for theme in themes], ensure_ascii=False)
+
+    assert "三星" not in serialized
+    assert "BITCOIN narrative path" in serialized or "BTC market path" in serialized

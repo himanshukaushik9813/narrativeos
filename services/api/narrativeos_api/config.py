@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     path_market_contract_address: str | None = Field(
         default=None, validation_alias="PATH_MARKET_CONTRACT_ADDRESS"
     )
+    path_market_factory_address: str | None = Field(
+        default=None, validation_alias="PATH_MARKET_FACTORY_ADDRESS"
+    )
     oracle_private_key: str | None = Field(default=None, validation_alias="ORACLE_PRIVATE_KEY")
 
     def require_sosovalue(self) -> None:

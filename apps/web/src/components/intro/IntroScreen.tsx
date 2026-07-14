@@ -36,8 +36,7 @@ export function IntroScreen({ onComplete }: IntroScreenProps) {
   return (
     <section
       aria-label="NarrativeOS boot sequence"
-      className="fixed inset-0 z-[100] cursor-default overflow-hidden bg-black"
-      onClick={onComplete}
+      className="pointer-events-none fixed inset-0 z-[100] cursor-default overflow-hidden bg-black"
       role="presentation"
     >
       <BootSequence exiting={exiting} />

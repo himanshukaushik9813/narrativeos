@@ -361,6 +361,7 @@ export function PathContractBuilder() {
         status: "Published",
         txHash: published.txHash,
         onchainPathId: published.onchainPathId,
+        marketAddress: published.marketAddress,
         termsHash: published.termsHash,
         updatedAt: new Date().toISOString()
       };

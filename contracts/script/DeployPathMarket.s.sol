@@ -5,6 +5,6 @@ import "../src/PathMarket.sol";
 
 contract DeployPathMarket {
     function deploy(address oracle) external returns (PathMarket) {
-        return new PathMarket(oracle);
+        return new PathMarket(oracle, msg.sender);
     }
 }
