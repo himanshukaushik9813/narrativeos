@@ -21,3 +21,7 @@ out/
 broadcast/
 /lib/
 .vercel
+
+# Legacy local helpers; the app uses the tracked typed helpers in apps/web/src/lib.
+apps/web/src/lib/api.ts
+apps/web/src/lib/path-market-abi.ts
