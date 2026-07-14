@@ -19,5 +19,5 @@ __pycache__/
 cache/
 out/
 broadcast/
-lib/
+/lib/
 .vercel

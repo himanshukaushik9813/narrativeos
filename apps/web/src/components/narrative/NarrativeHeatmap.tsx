@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import CountUp from "react-countup";
 
-import { sectorScores } from "@/lib/mockData";
+import { sectorScores } from "@/lib/staticUiData";
 
 export function NarrativeHeatmap() {
   return (
@@ -11,6 +11,14 @@ export function NarrativeHeatmap() {
       <div className="mono mb-4 text-[10px] uppercase tracking-widest text-[#444]">
         SOSOVALUE SECTOR HEATMAP
       </div>
+      {!sectorScores.length ? (
+        <div className="rounded-sm border border-[#211a10] bg-[#100d06] p-5">
+          <div className="mono text-[10px] uppercase tracking-widest text-[#ffaa44]">Live heatmap waiting</div>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#777]">
+            Sector scores are shown only when supported by live SoSoValue evidence. NarrativeOS does not publish synthetic heatmap values.
+          </p>
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {sectorScores.map((sector) => {
           const positive = sector.change >= 0;

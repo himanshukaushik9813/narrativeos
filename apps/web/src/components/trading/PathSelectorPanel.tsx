@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 import { PathOrderTicket } from "@/components/trading/PathOrderTicket";
 import { cn } from "@/lib/cn";
-import { pathOptions } from "@/lib/mockData";
+import { pathOptions } from "@/lib/staticUiData";
 import type { PathContract, PathKey } from "@/lib/types";
 
 type PathSelectorPanelProps = {

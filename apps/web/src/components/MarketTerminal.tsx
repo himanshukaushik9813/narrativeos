@@ -13,7 +13,7 @@ import { PathSelectorPanel } from "@/components/trading/PathSelectorPanel";
 import { ReviewPublishModal } from "@/components/trading/ReviewPublishModal";
 import { SignalFeed } from "@/components/trading/SignalFeed";
 import { FeaturePanel } from "@/components/ui/FeaturePanel";
-import { defaultPathKey, pathOptions } from "@/lib/mockData";
+import { defaultPathKey, pathOptions } from "@/lib/staticUiData";
 import {
   draftPathContract,
   fetchMarketChart,

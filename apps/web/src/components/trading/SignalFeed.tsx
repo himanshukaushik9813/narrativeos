@@ -3,13 +3,17 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-import { signalFeed } from "@/lib/mockData";
+import { signalFeed } from "@/lib/staticUiData";
 import type { SignalItem } from "@/lib/types";
 
 export function SignalFeed() {
   const [items, setItems] = useState<SignalItem[]>(signalFeed);
 
   useEffect(() => {
+    if (!signalFeed.length) {
+      return;
+    }
+
     const interval = window.setInterval(() => {
       setItems((current) => {
         const next = signalFeed[current.length % signalFeed.length];
@@ -25,7 +29,7 @@ export function SignalFeed() {
       <div className="label label-active">SIGNALS</div>
       <div className="mt-3 h-px bg-[#1a1a1a]" />
       <div>
-        {items.map((signal, index) => (
+        {items.length ? items.map((signal, index) => (
           <motion.div
             key={`${signal.author}-${signal.time}-${index}`}
             initial={{ y: 15, opacity: 0 }}
@@ -45,7 +49,11 @@ export function SignalFeed() {
             </div>
             <p className="text-[11px] leading-5 text-[#555]">{signal.content}</p>
           </motion.div>
-        ))}
+        )) : (
+          <div className="py-4 text-xs leading-5 text-[#555]">
+            Live signal stream is waiting for accepted SoSoValue evidence. NarrativeOS does not fabricate activity.
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 import { SignalCard } from "@/components/feed/SignalCard";
-import { opportunitySignals } from "@/lib/mockData";
+import { opportunitySignals } from "@/lib/staticUiData";
 
 export default function FeedPage() {
   return (
@@ -19,9 +19,16 @@ export default function FeedPage() {
           ))}
         </div>
         <section>
-          {opportunitySignals.map((signal) => (
+          {opportunitySignals.length ? opportunitySignals.map((signal) => (
             <SignalCard key={signal.title} {...signal} />
-          ))}
+          )) : (
+            <div className="mt-6 rounded-sm border border-[#211a10] bg-[#100d06] p-5">
+              <div className="mono text-[10px] uppercase tracking-widest text-[#ffaa44]">Live feed waiting</div>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#777]">
+                Feed cards are generated only from accepted SoSoValue evidence. No synthetic whale, social, or sector signals are displayed.
+              </p>
+            </div>
+          )}
         </section>
       </div>
     </main>
