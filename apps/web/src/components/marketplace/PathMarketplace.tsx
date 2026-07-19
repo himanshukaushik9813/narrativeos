@@ -43,6 +43,21 @@ type TabKey =
   | "Highest Accuracy"
   | "Most Profitable Creators";
 
+const MARKET_SECTION_NAMES: TabKey[] = [
+  "Trending Contracts",
+  "Highest Volume",
+  "Highest Confidence",
+  "Most Staked",
+  "Newest",
+  "Ending Soon",
+  "Highest Accuracy",
+  "Most Profitable Creators"
+];
+
+function emptyMarketSections(): MarketSection[] {
+  return MARKET_SECTION_NAMES.map((name) => ({ name, markets: [] }));
+}
+
 export function PathMarketplace() {
   const [markets, setMarkets] = useState<PathMarketView[]>([]);
   const [sections, setSections] = useState<MarketSection[]>([]);
@@ -72,6 +87,15 @@ export function PathMarketplace() {
       setSelectedMarketId((current) => current ?? marketResponse.markets[0]?.contractId ?? null);
     } catch (caught) {
       const apiError = toApiError(caught);
+      if (apiError.status === 404 || apiError.message.toLowerCase() === "not found") {
+        setMarkets([]);
+        setSections(emptyMarketSections());
+        setCreators([]);
+        setHistory([]);
+        setSelectedMarketId(null);
+        setError(null);
+        return;
+      }
       setError({ message: apiError.message, status: apiError.status, missing: apiError.missing });
     } finally {
       if (!signal?.aborted) {
