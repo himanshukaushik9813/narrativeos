@@ -19,7 +19,9 @@ import type {
 } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_NARRATIVEOS_API_BASE ?? "http://127.0.0.1:8000";
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 30000;
+const LIVE_ENDPOINT_TIMEOUT_MS = 45000;
+const LIVE_ENDPOINT_RETRIES = 1;
 const SETTLEMENT_NETWORK = "Arbitrum Sepolia";
 const ARBITRUM_SEPOLIA_EXPLORER = "https://sepolia.arbiscan.io";
 const MARKET_SECTION_NAMES: MarketSection["name"][] = [
@@ -65,7 +67,12 @@ export class NarrativeApiError extends Error {
 }
 
 export async function fetchTopNarratives(signal?: AbortSignal): Promise<NarrativesResponse> {
-  const response = await request<NarrativesResponse>("/api/narratives/top", { signal });
+  const response = await request<NarrativesResponse>("/api/narratives/top", {
+    signal,
+    timeoutMs: LIVE_ENDPOINT_TIMEOUT_MS,
+    retries: LIVE_ENDPOINT_RETRIES,
+    cacheKey: "top-narratives"
+  });
   return {
     ...response,
     narratives: response.narratives.map(sanitizeNarrativeTheme)
@@ -73,7 +80,12 @@ export async function fetchTopNarratives(signal?: AbortSignal): Promise<Narrativ
 }
 
 export async function fetchMarketChart(signal?: AbortSignal): Promise<MarketChartResponse> {
-  return request<MarketChartResponse>("/api/market-chart?asset=btc&points=54&future_points=28", { signal });
+  return request<MarketChartResponse>("/api/market-chart?asset=btc&points=54&future_points=28", {
+    signal,
+    timeoutMs: LIVE_ENDPOINT_TIMEOUT_MS,
+    retries: LIVE_ENDPOINT_RETRIES,
+    cacheKey: "market-chart-btc"
+  });
 }
 
 export async function fetchPublishedPathContracts(signal?: AbortSignal): Promise<PathContractsResponse> {
@@ -89,7 +101,12 @@ export async function fetchPathMarkets(
 ): Promise<MarketsResponse> {
   const query = includeLiveCandidates ? "" : "?include_live_candidates=false";
   try {
-    const response = await request<MarketsResponse>(`/api/markets${query}`, { signal });
+    const response = await request<MarketsResponse>(`/api/markets${query}`, {
+      signal,
+      retries: includeLiveCandidates ? LIVE_ENDPOINT_RETRIES : 0,
+      timeoutMs: includeLiveCandidates ? LIVE_ENDPOINT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+      cacheKey: includeLiveCandidates ? "path-markets-live" : "path-markets-published"
+    });
     return normalizeMarketsResponse(response);
   } catch (caught) {
     if (!isLegacyEndpointMiss(caught)) {
@@ -241,9 +258,62 @@ export function toApiError(error: unknown): NarrativeApiError {
   return new NarrativeApiError("NarrativeOS API request failed");
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+type NarrativeRequestInit = RequestInit & {
+  timeoutMs?: number;
+  retries?: number;
+  retryDelayMs?: number;
+  cacheKey?: string;
+};
+
+async function request<T>(path: string, init: NarrativeRequestInit = {}): Promise<T> {
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    retries = 0,
+    retryDelayMs = 900,
+    cacheKey,
+    ...requestInit
+  } = init;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const payload = await requestOnce<T>(path, requestInit, timeoutMs);
+      if (cacheKey) {
+        writeLiveCache(cacheKey, payload);
+      }
+      return payload;
+    } catch (error) {
+      if (requestInit.signal?.aborted) {
+        throw error;
+      }
+
+      lastError = error;
+      const apiError = toApiError(error);
+      if (attempt >= retries || !isRetryableApiError(apiError)) {
+        break;
+      }
+
+      await delay(retryDelayMs * (attempt + 1), requestInit.signal);
+    }
+  }
+
+  if (cacheKey) {
+    const cached = readLiveCache<T>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  throw lastError ?? new NarrativeApiError("NarrativeOS API request failed");
+}
+
+async function requestOnce<T>(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<T> {
   const timeoutController = new AbortController();
-  const timeout = window.setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => timeoutController.abort(), timeoutMs);
   const signal = mergeSignals(init.signal, timeoutController.signal);
   let response: Response;
   try {
@@ -257,7 +327,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     });
   } catch (error) {
     if (timeoutController.signal.aborted) {
-      throw new NarrativeApiError("NarrativeOS API request timed out. Live integrations may be slow or rate-limited.", 408);
+      throw new NarrativeApiError(
+        "NarrativeOS backend is still waking up or the live SoSoValue feed is slow. Retry in a moment.",
+        408
+      );
     }
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -290,6 +363,59 @@ async function buildApiError(response: Response): Promise<NarrativeApiError> {
     );
   } catch {
     return new NarrativeApiError(fallback, response.status);
+  }
+}
+
+function isRetryableApiError(error: NarrativeApiError): boolean {
+  return error.status === 0 || error.status === 408 || error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504;
+}
+
+function delay(durationMs: number, signal?: AbortSignal | null): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException("Aborted", "AbortError"));
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, durationMs);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true }
+    );
+  });
+}
+
+function liveCacheKey(cacheKey: string): string {
+  return `narrativeos.live-api.v1.${encodeURIComponent(API_BASE)}.${cacheKey}`;
+}
+
+function writeLiveCache<T>(cacheKey: string, payload: T): void {
+  try {
+    window.localStorage.setItem(
+      liveCacheKey(cacheKey),
+      JSON.stringify({
+        storedAt: new Date().toISOString(),
+        payload
+      })
+    );
+  } catch {
+    // Cache is a resilience aid only; storage failures should never block live data.
+  }
+}
+
+function readLiveCache<T>(cacheKey: string): T | null {
+  try {
+    const raw = window.localStorage.getItem(liveCacheKey(cacheKey));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as { payload?: T };
+    return parsed.payload ?? null;
+  } catch {
+    return null;
   }
 }
 
